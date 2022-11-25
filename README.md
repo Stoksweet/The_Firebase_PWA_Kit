@@ -63,6 +63,16 @@ Start the server
   ionic serve
 ```
 
+## Adding PWA Elements
+
+You now have a Ionic web app but let's turn into a PWA with one magic angular command:
+```bash
+    ng add @angular/pwa
+``` 
+
+It adds different png files for different splash images for various resolutions icon-128x128.png, icon-144x144.png, icon-152x152.png, icon-192x192.png, icon-384x384.png, icon-512x512.png. Additionally, it adds ngsw-config.json and manifest.webmanifest for configuration purposes. Also, it modifies angular.json, package.json, index.html and app.module.ts. So now when your app is served users will be prompted to install the PWA upon vising your app.
+![Output](https://firebasestorage.googleapis.com/v0/b/fb-pwa-kit.appspot.com/o/add.PNG?alt=media&token=ebf0de99-f0e5-4461-99b7-0f5bd223d4fb)
+
 ## Firebase Initialisation
 
 Once you have a project setup go ahead and click the web icon to get your config. Alternatively you can find it by clicking the settings icon in the top left and selecting ptoject settings.
@@ -350,6 +360,56 @@ app-routing.module.ts
     ]
 ```
 
-Congrats, you have implemented Firebase auth and managed to get your app working with it.
+Congrats, you have implemented Firebase auth and managed to get your app working with it. But the work is not yet done. We only need to secure our Firebase database by modifying our Firestore rules.
+
+I have gone ahead and shared some helper functions with you to secure your Firestore collection paths using auth or user roles.
+
+Firestore Rules:
+```bash
+    // Reusable function to determine document ownership
+    function isOwner(userId) {
+        return request.auth.uid == userId
+    }
+    
+    // Reusable function to get users role
+    function getRole(role) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles[role]
+    }
+
+    // Allow create, write, read and update on our users collection
+    match /users/{userId} {
+        allow create, write, read, update;
+    }
+```
+
+## Deployment to Firebase Hosting
+
+Congrats on making it this far. The last step for us is to build our PWA and deploy it to Firebase Hosting. For this please ensure that you have hosting enables on the Firebase console.
+
+Let's start by installing the firebase-tools with NPM:
+```bash
+    npm i firebase-tools
+```
+
+Next we want to initialize the Firebase CLI in our project directory:
+```bash
+    firebase init
+``` 
+
+In the step above you will need to confirm that you are trying to init firebase, then you will need to select hosting in the options menu. When you promted to setup as a SPA say yes. Lastly, make sure that you link it to your www folder where we will place the build app.
+
+Now lets build the production app shall we:
+```bash
+    ionic build --prod
+```
+
+Once this has completed you should now see the www folder in your project directory.
+
+Now that we have out built production app lets deploy it then:
+```bash
+    firebase deploy --only hosting
+```
+
+The above commant will deploy your application to firebase hosting! You should see the testing link in the response, alternatively have a look at the hosting tab in the Firebase console for more info.
 
 
