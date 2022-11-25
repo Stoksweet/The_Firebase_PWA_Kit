@@ -168,6 +168,188 @@ Luckily for us we can employ the Ionic CLI. Please run the following commands to
 
 With that all done, we have the necessary files required to move onto the next step. Before we do let me explain the purpose of these files. The first is our auth page, this will house our UI and Component code, the second is a page guard that we will make use of to only allow authenticated users to a specific page route and lastly we have our auth service which is where we will house all the important auth code to be injected into other components later. 
 
+Before we can move forward we will need a User Model. Let's create a file for it in our auth folder:
 
+user.model.ts
+```bash
+    export interface User {
+        uid: string;
+        email: string;
+        photoURL?: string;
+        displayName?: string;
+        returnedAt: any;
+        roles?: Roles;
+    }
+
+    export interface Roles {
+        visitor?: boolean;
+        subscriber?: boolean;
+        admin?: boolean;
+    }
+```
+
+On to the auth service:
+
+auth.service.ts
+```bash
+    import { Injectable } from '@angular/core';
+    import { Router } from '@angular/router';
+    import { User } from './user.model'; 
+
+    import auth from 'firebase/compat/app';
+    import { AngularFireAuth } from '@angular/fire/compat/auth';
+    import { AngularFirestore, AngularFirestoreDocument } from '@angular/fire/compat/firestore';
+
+    import { Observable, of } from 'rxjs';
+    import { first, switchMap, take } from 'rxjs/operators';
+
+    @Injectable({ providedIn: 'root' })
+    export class AuthService {
+
+        user$: Observable<User>;
+
+        constructor(
+        private afAuth: AngularFireAuth,
+        private afs: AngularFirestore,
+        private router: Router,
+        ) { 
+            // Get the auth state, then fetch the Firestore user document or return null
+            this.user$ = this.afAuth.authState.pipe(
+                switchMap(user => {
+                    // Logged in
+                if (user) {
+                    return this.afs.doc<User>(`users/${user.uid}`).valueChanges();
+                } else {
+                    // Logged out
+                    return of(null);
+                }
+                })
+            )
+        }
+
+        getUser() {
+            return this.user$.pipe(first()).toPromise();
+        }
+
+        async googleSignin() {
+            const provider = new auth.auth.GoogleAuthProvider();
+            const credential = await this.afAuth.signInWithPopup(provider);
+            return this.updateUserData(credential.user);
+        }
+    
+        private updateUserData(user) {
+
+            // Sets user data to firestore on login
+            const userRef: AngularFirestoreDocument<User> = this.afs.doc(`users/${user.uid}`);
+
+            const data = { 
+                uid: user.uid, 
+                email: user.email, 
+                displayName: user.displayName, 
+                photoURL: user.photoURL,
+                returnedAt: new Date(),
+                roles: {
+                    visitor: true,
+                    subscriber: false,
+                    admin: false
+                }
+            };
+
+            return userRef.set(data, { merge: true });
+        }
+    
+        async signOut() {
+        this.afAuth.signOut().then(() => {
+            this.router.navigate(['/auth']).then(() => {
+            console.log('Redirect To Auth Page');
+            }).catch(err => console.log(err));
+        });
+        }
+
+    }
+
+```
+
+Let's add a Google Auth button to our html for testing:
+
+auth.page.html
+```bash
+    <ion-button color="dark" expland="block" fill="clear" (click)="auth.googleSignin()">
+        <ion-icon name="logo-google" slot="start"></ion-icon> Continue with Google
+    </ion-button>
+```
+
+In order to use this auth.googleSignin method we will need to inject it into the page and make it public.
+
+auth.page.ts
+```bash
+    constructor(
+        public auth: AuthService
+    ) { }
+```
+
+Last but not least let's configure an auth based route Guard. This route guard has just one job which is to only allow authenticated users to certain page routes.
+
+auth.guard.ts
+```bash
+    import { Injectable } from '@angular/core';
+    import { CanActivate, ActivatedRouteSnapshot, RouterStateSnapshot, Router } from '@angular/router';
+
+    import { AuthService} from './auth.service'
+    import { Observable } from 'rxjs';
+    import { tap, map, take } from 'rxjs/operators';
+    import { AlertController, ToastController } from '@ionic/angular';
+
+    @Injectable({
+        providedIn: 'root'
+    })
+    export class AuthGuard implements CanActivate {
+        constructor(
+            private auth: AuthService, 
+            private router: Router, 
+            private alertCtrl: AlertController,
+            private toastCtrl: ToastController
+        ) {}
+
+        canActivate(next: ActivatedRouteSnapshot, state: RouterStateSnapshot): Observable<boolean> {
+
+            return this.auth.user$.pipe(
+                take(1),
+                map(user => !!user), // <-- map to boolean
+                tap(loggedIn => {
+                    if (!loggedIn) {
+                    this.toastCtrl.create({
+                        message: 'Please login first.',
+                        duration: 4000
+                    }).then(toastEl => toastEl.present()).catch(err => console.log(err));
+                    console.log('access denied');
+                    this.router.navigate(['/auth']);
+                    }
+                })
+            )
+        }
+    }
+```
+
+So now we have our guard. At this point you can add it to your routing page module on the routed that you want to protect:
+
+app-routing.module.ts
+```bash
+    import { AuthGuard } from './pages/auth/auth.guard';
+
+    const routes: Routes = [
+        {
+            path: '',
+            loadChildren: () => import('./pages/auth/auth.module').then(m => m.AuthPageModule)
+        },
+        {
+            path: 'protected-route',
+            loadChildren: () => import('./pages/protected-page/protected-page.module').then( m => m.ProtectedPageModule),
+            canActivate: [AuthGuard]
+        }
+    ]
+```
+
+Congrats, you have implemented Firebase auth and managed to get your app working with it.
 
 
